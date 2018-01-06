@@ -1,5 +1,9 @@
 package main
 
+import (
+	"sync"
+)
+
 type Catalog struct {
 	Products   map[string]*Item
 	Promotions map[string]Promotion
@@ -20,7 +24,7 @@ func GetCatalog() *Catalog {
 	once.Do(func() {
 		instance := &Catalog{
 			Products:   make(map[string]*Item),
-			Promotions: make(map[string]Promotion),
+			Promotions: make(map[string][]Promotion),
 		}
 		AddSeedItems(catalog)
 		AddSeedPromotions(catalog)
@@ -40,6 +44,11 @@ func (catalog *Catalog) Add(code string, price Int) error {
 }
 func (catalog *Catalog) SetPrice(code String, price Int) error                   {}
 func (catalog *Catalog) SetHidden(code String, hidden bool) error                {}
-func (catalog *Catalog) Get(code String) error                                   {}
+func (catalog *Catalog) Get(code String) (*Item, error)                          {}
 func (catalog *Catalog) AddPromotion(code String, promotion *Promotion) error    {}
 func (catalog *Catalog) DeletePromotion(code String, promotion *Promotion) error {}
+
+func (catalog *Catalog) Contains(itemCode string) bool {
+	_, err := catalog.Get(itemCode)
+	return err != nil
+}

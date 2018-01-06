@@ -10,6 +10,12 @@ type Checkout struct {
 	Lines   []*CheckoutLine
 }
 
+type CheckoutLine struct {
+	ItemCode  string
+	Amount    int
+	UnitPrice float64
+}
+
 var (
 	TimeoutErr = fmt.Errorf("The operation timed out. Please try again.")
 )
@@ -17,7 +23,7 @@ var (
 func NewCheckout() *Checkout {
 	return &Checkout{
 		// Mock of a database connection, so to speak
-		Catalog: NewCatalog(),
+		Catalog: GetCatalog(),
 	}
 }
 
@@ -83,6 +89,6 @@ func (checkout *Checkout) GetLineFor(itemCode string) *CheckoutLine {
 }
 
 func (checkout *Checkout) AddNewLine(itemCode string, amount int, unitPrice float64) {
-	newLine := &CheckoutLine{ItemCode: itemCode, Amount: int, UnitPrice: unitPrice}
+	newLine := &CheckoutLine{ItemCode: itemCode, Amount: amount}
 	checkout.Lines = append(checkout.Lines, newLine)
 }
