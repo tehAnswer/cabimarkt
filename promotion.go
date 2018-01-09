@@ -7,9 +7,9 @@ import (
 type Promotion interface {
 	Active() bool
 	// Items that are present of the promotion
-	ItemCode() string
-
-	FinalPrice(line *CheckoutLine) int
+	GetItemCode() string
+	GetRef() string
+	Call(line *CheckoutLine) *Subtotal
 }
 
 type BuyGetPromotion struct {
@@ -17,6 +17,7 @@ type BuyGetPromotion struct {
 	RequiredAmount  int
 	ExpiresAt       int64
 	ItemCode        string
+	ID              string
 }
 
 func (promotion *BuyGetPromotion) IsValid(line *CheckoutLine) bool {
@@ -24,20 +25,31 @@ func (promotion *BuyGetPromotion) IsValid(line *CheckoutLine) bool {
 }
 
 func (promotion *BuyGetPromotion) Active() bool {
-	return promotion.ExpiresAt < time.Now().Unix()
+	return promotion.ExpiresAt > time.Now().Unix()
 }
 
 func (promotion *BuyGetPromotion) MeetsRequirements(line *CheckoutLine) bool {
-	return promotion.RequiredAmount == line.Amount && promotion.ItemCode == line.ItemCode
+	return line.Amount >= promotion.RequiredAmount && promotion.ItemCode == line.ItemCode
 }
 
 func (promotion *BuyGetPromotion) GetItemCode() string { return promotion.ItemCode }
+func (promotion *BuyGetPromotion) GetRef() string      { return promotion.ID }
 
-func (promotion *BuyGetPromotion) FinalPrice(line *CheckoutLine) float64 {
+func (promotion *BuyGetPromotion) Call(line *CheckoutLine) *Subtotal {
 	if promotion.IsValid(line) {
-		return float64(promotion.ChargableAmount) * line.UnitPrice
+		// You can use this promotion more than one time (e.g 2x1 is 4x2 two times).
+		promotionItems := float64(line.Amount / promotion.RequiredAmount * promotion.ChargableAmount)
+		remainingItems := float64(line.Amount % promotion.RequiredAmount)
+		finalPrice := promotionItems*line.UnitPrice + remainingItems*line.UnitPrice
+		return &Subtotal{
+			Items: map[string]int{
+				line.ItemCode: line.Amount,
+			},
+			PromotionRef: promotion.ID,
+			FinalPrice:   finalPrice,
+		}
 	} else {
-		return float64(line.Amount) * line.UnitPrice
+		return nil
 	}
 }
 
@@ -46,6 +58,7 @@ type BulkPromotion struct {
 	BulkPrice      float64
 	ExpiresAt      int64
 	ItemCode       string
+	ID             string
 }
 
 func (promotion *BulkPromotion) IsValid(line *CheckoutLine) bool {
@@ -53,20 +66,27 @@ func (promotion *BulkPromotion) IsValid(line *CheckoutLine) bool {
 }
 
 func (promotion *BulkPromotion) Active() bool {
-	return promotion.ExpiresAt < time.Now().Unix()
+	return promotion.ExpiresAt > time.Now().Unix()
 }
 
 func (promotion *BulkPromotion) MeetsRequirements(line *CheckoutLine) bool {
-	return promotion.RequiredAmount >= line.Amount && promotion.ItemCode == line.ItemCode
+	return line.Amount >= promotion.RequiredAmount && promotion.ItemCode == line.ItemCode
 }
 
 func (promotion *BulkPromotion) GetItemCode() string { return promotion.ItemCode }
+func (promotion *BulkPromotion) GetRef() string      { return promotion.ID }
 
-func (promotion *BulkPromotion) FinalPrice(line *CheckoutLine) float64 {
-	if promotion.IsValid(line) && promotion.Active() {
-		return float64(line.Amount) * promotion.BulkPrice
+func (promotion *BulkPromotion) Call(line *CheckoutLine) *Subtotal {
+	if promotion.IsValid(line) {
+		return &Subtotal{
+			Items: map[string]int{
+				line.ItemCode: line.Amount,
+			},
+			PromotionRef: promotion.ID,
+			FinalPrice:   float64(line.Amount) * promotion.BulkPrice,
+		}
 	} else {
-		return float64(line.Amount) * line.UnitPrice
+		return nil
 	}
 }
 
@@ -74,6 +94,7 @@ type DiscountPromotion struct {
 	DiscountPrice float64
 	ExpiresAt     int64
 	ItemCode      string
+	ID            string
 }
 
 func (promotion *DiscountPromotion) IsValid(line *CheckoutLine) bool {
@@ -81,7 +102,7 @@ func (promotion *DiscountPromotion) IsValid(line *CheckoutLine) bool {
 }
 
 func (promotion *DiscountPromotion) Active() bool {
-	return promotion.ExpiresAt < time.Now().Unix()
+	return promotion.ExpiresAt > time.Now().Unix()
 }
 
 func (promotion *DiscountPromotion) MeetsRequirements(line *CheckoutLine) bool {
@@ -89,11 +110,18 @@ func (promotion *DiscountPromotion) MeetsRequirements(line *CheckoutLine) bool {
 }
 
 func (promotion *DiscountPromotion) GetItemCode() string { return promotion.ItemCode }
+func (promotion *DiscountPromotion) GetRef() string      { return promotion.ID }
 
-func (promotion *DiscountPromotion) FinalPrice(line *CheckoutLine) float64 {
+func (promotion *DiscountPromotion) Call(line *CheckoutLine) *Subtotal {
 	if promotion.IsValid(line) && promotion.Active() {
-		return float64(line.Amount) * promotion.DiscountPrice
+		return &Subtotal{
+			Items: map[string]int{
+				line.ItemCode: line.Amount,
+			},
+			PromotionRef: promotion.ID,
+			FinalPrice:   float64(line.Amount) * promotion.DiscountPrice,
+		}
 	} else {
-		return float64(line.Amount) * line.UnitPrice
+		return nil
 	}
 }

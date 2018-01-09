@@ -6,8 +6,9 @@ import (
 )
 
 type Checkout struct {
-	Catalog *Catalog
-	Lines   []*CheckoutLine
+	Catalog       *Catalog
+	Lines         []*CheckoutLine
+	PromotionRefs []string
 }
 
 type CheckoutLine struct {
@@ -28,8 +29,8 @@ func NewCheckout() *Checkout {
 }
 
 func (checkout *Checkout) Scan(itemCode string) error {
-	if checkout.Catalog.Contains(itemCode) {
-		return fmt.Errorf("There's not a product with \"%v\" code.", itemCode)
+	if _, err := checkout.Catalog.Get(itemCode); err != nil {
+		return err
 	} else {
 		if line := checkout.GetLineFor(itemCode); line != nil {
 			line.Amount = line.Amount + 1
@@ -37,24 +38,34 @@ func (checkout *Checkout) Scan(itemCode string) error {
 			checkout.AddNewLine(itemCode, 1)
 		}
 	}
+
+	return nil
 }
 
 func (checkout *Checkout) GetTotal() (float64, error) {
-	subtotalChannel := make(chan float64)
+	if len(checkout.Lines) == 0 {
+		return 0.0, nil
+	}
+
+	checkout.PromotionRefs = []string{}
+	subtotalChannel := make(chan *Subtotal)
 	errChannel := make(chan error)
 
 	defer close(subtotalChannel)
 	defer close(errChannel)
 
 	for _, line := range checkout.Lines {
-		go dispatch(line)
+		go Dispatch(line, subtotalChannel, errChannel)
 	}
 
 	subtotals, err := checkout.CollectSubtotals(len(checkout.Lines), subtotalChannel, errChannel)
 	if err == nil {
 		var total float64
 		for _, subtotal := range subtotals {
-			total = total + subtotal
+			total = total + subtotal.FinalPrice
+			if subtotal.PromotionRef != "" {
+				checkout.PromotionRefs = append(checkout.PromotionRefs, subtotal.PromotionRef)
+			}
 		}
 		return total, nil
 	} else {
@@ -62,8 +73,8 @@ func (checkout *Checkout) GetTotal() (float64, error) {
 	}
 }
 
-func (checkout *Checkout) CollectSubtotals(amountOfSubtotals int, subtotalChannel chan float64, errChannel chan error) ([]float64, error) {
-	subtotals := []float64{}
+func (checkout *Checkout) CollectSubtotals(amountOfSubtotals int, subtotalChannel chan *Subtotal, errChannel chan error) ([]*Subtotal, error) {
+	subtotals := []*Subtotal{}
 	for {
 		select {
 		case subtotal := <-subtotalChannel:
@@ -72,9 +83,9 @@ func (checkout *Checkout) CollectSubtotals(amountOfSubtotals int, subtotalChanne
 				return subtotals, nil
 			}
 		case err := <-errChannel:
-			return []float64{}, err
+			return []*Subtotal{}, err
 		case <-time.After(time.Second * 2):
-			return []float64{}, TimeoutErr
+			return []*Subtotal{}, TimeoutErr
 		}
 	}
 }
@@ -88,7 +99,11 @@ func (checkout *Checkout) GetLineFor(itemCode string) *CheckoutLine {
 	return nil
 }
 
-func (checkout *Checkout) AddNewLine(itemCode string, amount int, unitPrice float64) {
+func (checkout *Checkout) AddNewLine(itemCode string, amount int) {
 	newLine := &CheckoutLine{ItemCode: itemCode, Amount: amount}
 	checkout.Lines = append(checkout.Lines, newLine)
+}
+
+func Dispatch(line *CheckoutLine, subtotalChannel chan *Subtotal, errChannel chan error) {
+	NewHandler().Call(line, subtotalChannel, errChannel)
 }
