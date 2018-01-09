@@ -50,6 +50,7 @@ func AddSeedPromotions(catalog *Catalog) {
 		ItemCode:        "VOUCHER",
 		// 33658-09-27 03:46:39 +0200
 		ExpiresAt: 999999999999,
+		ID:        "241",
 	}
 	catalog.AddPromotion(twoForOneInVouchers)
 
@@ -58,6 +59,7 @@ func AddSeedPromotions(catalog *Catalog) {
 		RequiredAmount: 3,
 		ItemCode:       "TSHIRT",
 		ExpiresAt:      999999999999,
+		ID:             "DAMN",
 	}
 
 	catalog.AddPromotion(bulkTShirtPrice)
